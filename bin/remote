@@ -1,0 +1,52 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+socket=${1:-}
+session=${2:-}
+mode=${3:-}
+
+[ -S "$socket" ] || exit 1
+[[ "$session" =~ ^\$[0-9]+$ ]] || exit 2
+TMUX_REMOTE=(tmux -S "$socket")
+"${TMUX_REMOTE[@]}" has-session -t "$session" 2>/dev/null || exit 1
+
+case "$mode" in
+  state)
+    direction=${4:-}
+    case "$direction" in
+      left) edge=pane_at_left ;;
+      down) edge=pane_at_bottom ;;
+      up) edge=pane_at_top ;;
+      right) edge=pane_at_right ;;
+      *) exit 2 ;;
+    esac
+    "${TMUX_REMOTE[@]}" display-message -p -t "$session" \
+      "STATE #{$edge} #{pane_left} #{pane_top} #{pane_width} #{pane_height} #{window_width} #{window_height}"
+    "${TMUX_REMOTE[@]}" list-panes -t "$session" \
+      -F 'PANE #{pane_id} #{pane_left} #{pane_top} #{pane_width} #{pane_height} #{window_width} #{window_height}'
+    ;;
+  move)
+    direction=${4:-}
+    case "$direction" in
+      left) select=-L ;;
+      down) select=-D ;;
+      up) select=-U ;;
+      right) select=-R ;;
+      *) exit 2 ;;
+    esac
+    "${TMUX_REMOTE[@]}" select-pane -t "$session" "$select"
+    ;;
+  select)
+    pane=${4:-}
+    case "$pane" in
+      %*[!0-9]*|'') exit 2 ;;
+      %*)
+        "${TMUX_REMOTE[@]}" list-panes -t "$session" -F '#{pane_id}' | \
+          awk -v requested="$pane" '$0 == requested { found = 1 } END { exit !found }'
+        "${TMUX_REMOTE[@]}" select-pane -t "$pane"
+        ;;
+      *) exit 2 ;;
+    esac
+    ;;
+  *) exit 2 ;;
+esac
