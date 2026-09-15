@@ -27,6 +27,10 @@ trap cleanup EXIT
 tmux -L "$test_socket" -f /dev/null new-session -d -s first -x 80 -y 24
 tmux -L "$test_socket" new-session -d -s second -x 80 -y 24
 tmux -L "$test_socket" split-window -v -t second
+tmux -L "$test_socket" run-shell "bash '$repo_dir/tmux-seamless-remote.tmux'"
+left_binding=$(tmux -L "$test_socket" list-keys -T root M-Left)
+[[ "$left_binding" = *'select-pane -L'* ]]
+[[ "$left_binding" != *'run-shell -b'* ]]
 socket_path=$(tmux -L "$test_socket" display-message -p -t second '#{socket_path}')
 session_id=$(tmux -L "$test_socket" display-message -p -t second '#{session_id}')
 protocol_state=$(bash "$repo_dir/bin/remote" "$socket_path" "$session_id" state left)

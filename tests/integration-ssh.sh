@@ -59,4 +59,16 @@ active_remote=$("${SSH_TEST[@]}" "tmux list-panes -t '$remote_b' -F '#{pane_id} 
 
 [ "$active_local" = "$right_pane" ]
 [ "$active_remote" = "$remote_b_bottom" ]
+
+# Exercise the native local fast path followed by synchronous peer entry.
+remote_b_top=$("${SSH_TEST[@]}" "tmux list-panes -t '$remote_b' -F '#{pane_id} #{pane_top}'" | \
+  sort -nk2 | sed -n '1{s/ .*//;p;}')
+"${SSH_TEST[@]}" "tmux select-pane -t '$remote_b_top'"
+left_bottom=$(tmux -L "$local_socket" split-window -v -t "$left_pane" -P -F '#{pane_id}')
+tmux -L "$local_socket" select-pane -t "$left_bottom"
+tmux -L "$local_socket" select-pane -R
+tmux -L "$local_socket" run-shell "bash '$repo_dir/bin/enter' right '$right_pane'"
+active_remote=$("${SSH_TEST[@]}" "tmux list-panes -t '$remote_b' -F '#{pane_id} #{pane_active}'" | \
+  awk '$2 == 1 { print $1 }')
+[ "$active_remote" = "$remote_b_bottom" ]
 printf 'multi-session SSH integration test passed\n'

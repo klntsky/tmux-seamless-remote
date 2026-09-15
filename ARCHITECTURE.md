@@ -15,6 +15,7 @@ Otherwise navigation remains local and no error is shown to the user.
 - `tmux-seamless-remote.tmux` installs local bindings and publishes this tmux
   server's peer descriptor.
 - `bin/navigate` orchestrates one directional transition.
+- `bin/enter` aligns an inner pane after native tmux navigation enters a peer.
 - `lib/peer.sh` discovers SSH destinations, parses peer descriptors, and owns
   the SSH transport.
 - `bin/remote` performs operations against one explicitly addressed remote
@@ -65,7 +66,7 @@ Supported operations are:
 
 ## Navigation flow
 
-For every key press, `bin/navigate`:
+When the source is an advertised peer, `bin/navigate`:
 
 1. Resolves the source pane and its geometry.
 2. Checks whether the source is a compatible SSH/tmux peer.
@@ -81,6 +82,13 @@ For every key press, `bin/navigate`:
 
 This also covers a direct transition from a pane in remote session A to a pane
 in remote session B.
+
+When the source is an ordinary pane, the binding first uses tmux's native
+`select-pane`. If the resulting pane is also ordinary, no Bash helper or SSH
+operation runs. If the destination advertises a peer, the binding runs
+`bin/enter` synchronously to select the aligned inner pane. The helper uses
+tmux's last-pane marker to recover the source of the immediately preceding
+native selection.
 
 ## SSH assumptions
 
@@ -176,11 +184,15 @@ a separate geometry model per attached client.
 
 ## Concurrency and ordering
 
-Bindings use background `run-shell` commands so tmux input is not blocked by
-network latency. Consequently, several rapid navigation requests may overlap.
-SSH multiplexing reduces latency but does not serialize semantic operations.
-The last request to complete may determine focus when requests finish out of
-order.
+Remote transitions use foreground `run-shell` commands. The invoking tmux
+client therefore does not process later input until remote navigation has
+finished, preventing typed input from reaching the previously focused pane.
+Other clients attached to the server are not blocked.
+
+Ordinary local transitions use native `select-pane` and do not start a Bash
+helper. Entering a peer selects the outer pane first and then blocks while the
+aligned inner pane is selected. Leaving a peer blocks until its edge state and
+the resulting selection are known.
 
 Remote state and selection are separate protocol calls. Layout changes between
 those calls can invalidate the selected pane; validation prevents crossing the

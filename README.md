@@ -38,6 +38,9 @@ compatible peer, navigation stays local without displaying an error.
 
 The first remote transition may pay SSH connection setup latency. Further
 transitions reuse a private SSH control connection indefinitely by default.
+Remote transitions are synchronous so keys typed immediately afterward are
+delivered only after the destination pane is focused. Ordinary local moves use
+tmux's native pane selection and do not invoke SSH or a shell helper.
 
 ## Configuration
 
