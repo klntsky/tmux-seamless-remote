@@ -6,6 +6,10 @@ Stop doing mental math calculating the right prefix combination.
 `Alt` + **arrow** switches focused pane both inside the current tmux and across an SSH boundary
 (when the tmux on the other side also has this plugin installed).
 
+## Demo
+
+[![tmux-seamless-remote demo](https://asciinema.org/a/gFJz5SwRzGoC20VU.svg)](https://asciinema.org/a/gFJz5SwRzGoC20VU)
+
 The other machine must be accessible by SSH in batch mode (without an
 interactive passphrase prompt) for the signaling connection to be established.
 An encrypted key works when its passphrase has already been remembered by
