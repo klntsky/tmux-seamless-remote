@@ -15,7 +15,7 @@ An encrypted key works when its passphrase has already been remembered by
 
 Install the plugin on both the local and remote hosts.
 
-### With TPM
+### With [TPM](https://github.com/tmux-plugins/tpm)
 
 ```tmux
 set -g @plugin klntsky/tmux-seamless-remote
