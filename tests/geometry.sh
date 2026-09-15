@@ -29,18 +29,28 @@ tmux -L "$test_socket" new-session -d -s second -x 80 -y 24
 tmux -L "$test_socket" split-window -v -t second
 tmux -L "$test_socket" run-shell "bash '$repo_dir/tmux-seamless-remote.tmux'"
 left_binding=$(tmux -L "$test_socket" list-keys -T root M-Left)
-[[ "$left_binding" = *'select-pane -L'* ]]
 [[ "$left_binding" != *'run-shell -b'* ]]
+[[ "$left_binding" = *'bin/navigate'* ]]
 socket_path=$(tmux -L "$test_socket" display-message -p -t second '#{socket_path}')
 session_id=$(tmux -L "$test_socket" display-message -p -t second '#{session_id}')
-protocol_state=$(bash "$repo_dir/bin/remote" "$socket_path" "$session_id" state left)
+protocol_state=$(bash "$repo_dir/bin/remote" "$socket_path" "$session_id" navigate left)
 [ "$(sed -n '1{s/ .*//;p;}' <<< "$protocol_state")" = STATE ]
 [ "$(rg -c '^PANE ' <<< "$protocol_state")" = 2 ]
 top_pane=$(tmux -L "$test_socket" list-panes -t second -F '#{pane_id} #{pane_top}' | \
   sort -nk2 | sed -n '1{s/ .*//;p;}')
-bash "$repo_dir/bin/remote" "$socket_path" "$session_id" move up
+navigate_result=$(bash "$repo_dir/bin/remote" "$socket_path" "$session_id" navigate up)
+[ "$(sed -n '1p' <<< "$navigate_result")" = MOVED ]
 active_pane=$(tmux -L "$test_socket" list-panes -t second -F '#{pane_id} #{pane_active}' | \
   awk '$2 == 1 { print $1 }')
 [ "$active_pane" = "$top_pane" ]
+navigate_result=$(bash "$repo_dir/bin/remote" "$socket_path" "$session_id" navigate down)
+[ "$(sed -n '1p' <<< "$navigate_result")" = MOVED ]
+bottom_pane=$(tmux -L "$test_socket" list-panes -t second -F '#{pane_id} #{pane_top}' | \
+  sort -nk2 | tail -1 | cut -d' ' -f1)
+active_pane=$(tmux -L "$test_socket" list-panes -t second -F '#{pane_id} #{pane_active}' | \
+  awk '$2 == 1 { print $1 }')
+[ "$active_pane" = "$bottom_pane" ]
+enter_result=$(bash "$repo_dir/bin/remote" "$socket_path" "$session_id" enter right 0.5 0.75)
+[ "$(sed -n '1p' <<< "$enter_result")" = "SELECTED $bottom_pane" ]
 
 printf 'geometry and protocol tests passed\n'

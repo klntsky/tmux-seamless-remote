@@ -3,7 +3,6 @@ set -euo pipefail
 
 plugin_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 navigator="$plugin_dir/bin/navigate"
-enterer="$plugin_dir/bin/enter"
 remote_helper="$plugin_dir/bin/remote"
 
 encode_title_field() {
@@ -29,21 +28,12 @@ down_key=$(option_or_default @seamless-remote-down-key M-Down)
 up_key=$(option_or_default @seamless-remote-up-key M-Up)
 right_key=$(option_or_default @seamless-remote-right-key M-Right)
 
-peer_format='#{&&:#{==:#{pane_current_command},ssh},#{m:TSR1:*,#{pane_title}}}'
-
 bind_navigation() {
-  local key=$1 direction=$2 select=$3
-  local remote_navigation="run-shell \"bash '$navigator' $direction #{pane_id}\""
-  local enter_remote="run-shell \"bash '$enterer' $direction #{pane_id}\""
-  local local_navigation
-
-  # Move with tmux itself, then coordinate only if the selected destination
-  # advertises a compatible nested tmux.
-  local_navigation="select-pane $select ; if-shell -F '$peer_format' { $enter_remote }"
-  tmux bind-key -n "$key" if-shell -F "$peer_format" "$remote_navigation" "$local_navigation"
+  local key=$1 direction=$2
+  tmux bind-key -n "$key" run-shell "bash '$navigator' $direction #{pane_id}"
 }
 
-bind_navigation "$left_key" left -L
-bind_navigation "$down_key" down -D
-bind_navigation "$up_key" up -U
-bind_navigation "$right_key" right -R
+bind_navigation "$left_key" left
+bind_navigation "$down_key" down
+bind_navigation "$up_key" up
+bind_navigation "$right_key" right

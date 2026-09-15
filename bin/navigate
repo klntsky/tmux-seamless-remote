@@ -28,16 +28,6 @@ local_neighbor() {
       -f "$plugin_dir/lib/local-neighbor.awk"
 }
 
-aligned_remote_pane() {
-  local state=$1 destination=$2 point_x=$3 point_y=$4
-  local dx dy dw dh
-  read -r dx dy dw dh <<< "$(pane_geometry "$destination")"
-  awk -v direction="$direction" \
-    -v point_x="$point_x" -v point_y="$point_y" \
-    -v dx="$dx" -v dy="$dy" -v dw="$dw" -v dh="$dh" \
-    -f "$plugin_dir/lib/remote-edge.awk" <<< "$state"
-}
-
 read -r source_x source_y source_width source_height <<< "$(pane_geometry "$source_pane")"
 reference_x=$(awk "BEGIN { print $source_x + $source_width / 2 }")
 reference_y=$(awk "BEGIN { print $source_y + $source_height / 2 }")
@@ -46,17 +36,14 @@ source_peer=$(tsr_peer_for_pane "$source_pane" || true)
 if [ -n "$source_peer" ]; then
   read -r source_target source_helper source_socket source_session <<< "$source_peer"
   state=$(tsr_remote_call "$source_target" "$source_helper" "$source_socket" \
-    "$source_session" state "$direction" || true)
+    "$source_session" navigate "$direction" || true)
+  if [ "$(sed -n '1p' <<< "$state")" = MOVED ]; then
+    exit 0
+  fi
   read -r marker remote_edge remote_x remote_y remote_width remote_height remote_window_width remote_window_height \
     <<< "$(sed -n '1p' <<< "$state")"
   if [ "$marker" != STATE ]; then
     tmux select-pane -t "$source_pane" "$select"
-    exit 0
-  fi
-  if [ "$remote_edge" = 0 ]; then
-    tsr_remote_call "$source_target" "$source_helper" "$source_socket" \
-      "$source_session" move "$direction" >/dev/null || \
-      tmux select-pane -t "$source_pane" "$select"
     exit 0
   fi
   reference_x=$(awk "BEGIN { print $source_x + $source_width * ($remote_x + $remote_width / 2) / $remote_window_width }")
@@ -72,13 +59,11 @@ fi
 destination_peer=$(tsr_peer_for_pane "$destination" || true)
 if [ -n "$destination_peer" ]; then
   read -r destination_target destination_helper destination_socket destination_session <<< "$destination_peer"
-  state=$(tsr_remote_call "$destination_target" "$destination_helper" "$destination_socket" \
-    "$destination_session" state "$direction" || true)
-  if [ "$(sed -n '1{s/ .*//;p;}' <<< "$state")" = STATE ]; then
-    remote_pane=$(aligned_remote_pane "$state" "$destination" "$reference_x" "$reference_y")
-    [ -z "$remote_pane" ] || tsr_remote_call "$destination_target" "$destination_helper" \
-      "$destination_socket" "$destination_session" select "$remote_pane" >/dev/null || true
-  fi
+  read -r destination_x destination_y destination_width destination_height <<< "$(pane_geometry "$destination")"
+  normalized_x=$(awk "BEGIN { print ($reference_x - $destination_x) / $destination_width }")
+  normalized_y=$(awk "BEGIN { print ($reference_y - $destination_y) / $destination_height }")
+  tsr_remote_call "$destination_target" "$destination_helper" "$destination_socket" \
+    "$destination_session" enter "$direction" "$normalized_x" "$normalized_y" >/dev/null || true
 fi
 
 tmux select-pane -t "$destination"

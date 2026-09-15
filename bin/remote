@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+plugin_dir=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 socket=${1:-}
 session=${2:-}
 mode=${3:-}
@@ -10,43 +11,55 @@ mode=${3:-}
 TMUX_REMOTE=(tmux -S "$socket")
 "${TMUX_REMOTE[@]}" has-session -t "$session" 2>/dev/null || exit 1
 
+direction_edge_select() {
+  local direction=$1
+  case "$direction" in
+    left) printf '%s %s\n' pane_at_left -L ;;
+    down) printf '%s %s\n' pane_at_bottom -D ;;
+    up) printf '%s %s\n' pane_at_top -U ;;
+    right) printf '%s %s\n' pane_at_right -R ;;
+    *) return 2 ;;
+  esac
+}
+
+state_output() {
+  local direction=$1 edge
+  read -r edge _ <<< "$(direction_edge_select "$direction")"
+  "${TMUX_REMOTE[@]}" display-message -p -t "$session" \
+    "STATE #{$edge} #{pane_left} #{pane_top} #{pane_width} #{pane_height} #{window_width} #{window_height}"
+  "${TMUX_REMOTE[@]}" list-panes -t "$session" \
+    -F 'PANE #{pane_id} #{pane_left} #{pane_top} #{pane_width} #{pane_height} #{window_width} #{window_height}'
+}
+
 case "$mode" in
-  state)
+  navigate)
     direction=${4:-}
-    case "$direction" in
-      left) edge=pane_at_left ;;
-      down) edge=pane_at_bottom ;;
-      up) edge=pane_at_top ;;
-      right) edge=pane_at_right ;;
-      *) exit 2 ;;
-    esac
-    "${TMUX_REMOTE[@]}" display-message -p -t "$session" \
-      "STATE #{$edge} #{pane_left} #{pane_top} #{pane_width} #{pane_height} #{window_width} #{window_height}"
-    "${TMUX_REMOTE[@]}" list-panes -t "$session" \
-      -F 'PANE #{pane_id} #{pane_left} #{pane_top} #{pane_width} #{pane_height} #{window_width} #{window_height}'
+    read -r edge select <<< "$(direction_edge_select "$direction")"
+    state=$(state_output "$direction")
+    remote_edge=$(sed -n '1s/^STATE \([^ ]*\).*/\1/p' <<< "$state")
+    [ -n "$remote_edge" ] || exit 1
+    if [ "$remote_edge" = 0 ]; then
+      "${TMUX_REMOTE[@]}" select-pane -t "$session" "$select"
+      printf 'MOVED\n'
+    else
+      printf '%s\n' "$state"
+    fi
     ;;
-  move)
+  enter)
     direction=${4:-}
-    case "$direction" in
-      left) select=-L ;;
-      down) select=-D ;;
-      up) select=-U ;;
-      right) select=-R ;;
-      *) exit 2 ;;
-    esac
-    "${TMUX_REMOTE[@]}" select-pane -t "$session" "$select"
-    ;;
-  select)
-    pane=${4:-}
-    case "$pane" in
-      %*[!0-9]*|'') exit 2 ;;
-      %*)
-        "${TMUX_REMOTE[@]}" list-panes -t "$session" -F '#{pane_id}' | \
-          awk -v requested="$pane" '$0 == requested { found = 1 } END { exit !found }'
-        "${TMUX_REMOTE[@]}" select-pane -t "$pane"
-        ;;
-      *) exit 2 ;;
-    esac
+    point_x=${5:-}
+    point_y=${6:-}
+    direction_edge_select "$direction" >/dev/null
+    [[ "$point_x" =~ ^-?[0-9]+([.][0-9]+)?$ ]] || exit 2
+    [[ "$point_y" =~ ^-?[0-9]+([.][0-9]+)?$ ]] || exit 2
+    state=$(state_output "$direction")
+    remote_pane=$(awk -v direction="$direction" \
+      -v point_x="$point_x" -v point_y="$point_y" \
+      -v dx=0 -v dy=0 -v dw=1 -v dh=1 \
+      -f "$plugin_dir/lib/remote-edge.awk" <<< "$state")
+    [ -n "$remote_pane" ] || exit 1
+    "${TMUX_REMOTE[@]}" select-pane -t "$remote_pane"
+    printf 'SELECTED %s\n' "$remote_pane"
     ;;
   *) exit 2 ;;
 esac

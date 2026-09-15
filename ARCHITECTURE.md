@@ -15,7 +15,6 @@ Otherwise navigation remains local and no error is shown to the user.
 - `tmux-seamless-remote.tmux` installs local bindings and publishes this tmux
   server's peer descriptor.
 - `bin/navigate` orchestrates one directional transition.
-- `bin/enter` aligns an inner pane after native tmux navigation enters a peer.
 - `lib/peer.sh` discovers SSH destinations, parses peer descriptors, and owns
   the SSH transport.
 - `bin/remote` performs operations against one explicitly addressed remote
@@ -59,10 +58,10 @@ selected pane belongs to the addressed session.
 
 Supported operations are:
 
-- `state <direction>`: return the active pane's edge state and the current
-  window's geometry.
-- `move <direction>`: move within the exact remote session.
-- `select <pane-id>`: select a validated pane within the exact remote session.
+- `navigate <direction>`: move within the exact remote session when possible;
+  otherwise return the edge state and geometry in the same request.
+- `enter <direction> <x> <y>`: choose and select the aligned edge pane using a
+  normalized reference point in the remote window.
 
 ## Navigation flow
 
@@ -70,8 +69,8 @@ When the source is an advertised peer, `bin/navigate`:
 
 1. Resolves the source pane and its geometry.
 2. Checks whether the source is a compatible SSH/tmux peer.
-3. If the remote pane has a neighbor in the requested direction, asks the
-   remote helper to move and stops.
+3. Asks the remote helper to navigate; if it moves within the remote layout,
+   stops.
 4. If the remote pane is at its edge, maps the center of that remote pane into
    the containing local SSH pane.
 5. Chooses the nearest local pane in the requested direction, using the mapped
@@ -83,12 +82,10 @@ When the source is an advertised peer, `bin/navigate`:
 This also covers a direct transition from a pane in remote session A to a pane
 in remote session B.
 
-When the source is an ordinary pane, the binding first uses tmux's native
-`select-pane`. If the resulting pane is also ordinary, no Bash helper or SSH
-operation runs. If the destination advertises a peer, the binding runs
-`bin/enter` synchronously to select the aligned inner pane. The helper uses
-tmux's last-pane marker to recover the source of the immediately preceding
-native selection.
+For an ordinary source pane, `bin/navigate` computes the geometry-aware local
+neighbor directly. This intentionally avoids tmux's focus-history choice when
+several panes are candidates in one direction. It performs no SSH operation
+unless the selected neighbor is an advertised peer.
 
 ## SSH assumptions
 
@@ -189,15 +186,14 @@ client therefore does not process later input until remote navigation has
 finished, preventing typed input from reaching the previously focused pane.
 Other clients attached to the server are not blocked.
 
-Ordinary local transitions use native `select-pane` and do not start a Bash
-helper. Entering a peer selects the outer pane first and then blocks while the
-aligned inner pane is selected. Leaving a peer blocks until its edge state and
-the resulting selection are known.
+All navigation bindings use foreground `run-shell` commands. Ordinary local
+transitions still remain local and geometry-aware; remote transitions block
+until the resulting selection is known.
 
-Remote state and selection are separate protocol calls. Layout changes between
-those calls can invalidate the selected pane; validation prevents crossing the
-advertised session boundary, and failure falls back or is ignored rather than
-selecting an unrelated pane.
+The `navigate` and `enter` protocol operations combine state inspection and the
+resulting remote selection into one request. The remote helper remains
+authoritative for the current layout; failures fall back or are ignored rather
+than selecting an unrelated pane.
 
 ## Trust model
 

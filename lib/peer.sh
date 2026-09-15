@@ -53,17 +53,32 @@ tsr_ssh_options() {
 }
 
 tsr_remote_call() {
-  local target=$1 helper_token=$2 socket_token=$3 session=$4 mode=$5 argument=$6
-  local command
+  local target=$1 helper_token=$2 socket_token=$3 session=$4 mode=$5
+  shift 5
+  local argument quoted command command_arguments=
   [[ "$helper_token" =~ ^[A-Za-z0-9+/]+={0,2}$ ]] || return 1
   [[ "$socket_token" =~ ^[A-Za-z0-9+/]+={0,2}$ ]] || return 1
   [[ "$session" =~ ^\$[0-9]+$ ]] || return 1
-  case "$mode:$argument" in
-    state:left|state:down|state:up|state:right|move:left|move:down|move:up|move:right|select:%[0-9]*) ;;
+  case "$mode" in
+    navigate)
+      [ "$#" = 1 ] || return 1
+      case "$1" in left|down|up|right) ;; *) return 1 ;; esac
+      ;;
+    enter)
+      [ "$#" = 3 ] || return 1
+      case "$1" in left|down|up|right) ;; *) return 1 ;; esac
+      [[ "$2" =~ ^-?[0-9]+([.][0-9]+)?$ ]] || return 1
+      [[ "$3" =~ ^-?[0-9]+([.][0-9]+)?$ ]] || return 1
+      ;;
     *) return 1 ;;
   esac
 
-  command="helper=\$(printf %s '$helper_token' | base64 -d); socket=\$(printf %s '$socket_token' | base64 -d); [ -r \"\$helper\" ] && bash \"\$helper\" \"\$socket\" '$session' '$mode' '$argument'"
+  for argument in "$@"; do
+    printf -v quoted '%q' "$argument"
+    command_arguments+=" $quoted"
+  done
+
+  command="helper=\$(printf %s '$helper_token' | base64 -d); socket=\$(printf %s '$socket_token' | base64 -d); [ -r \"\$helper\" ] && bash \"\$helper\" \"\$socket\" '$session' '$mode'$command_arguments"
   tsr_ssh_options
   ssh "${TSR_SSH_OPTIONS[@]}" "$target" "$command" 2>/dev/null
 }
