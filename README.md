@@ -4,7 +4,7 @@ Prefix-free pane navigation across nested tmux sessions over SSH.
 Stop doing mental math calculating the right prefix combination.
 
 `Alt` + **arrow** switches focused pane both inside the current tmux and across an SSH boundary
-(when the tmux on the other side also has this plugin installed).
+(when the tmux on the other side also has this plugin installed). It respects layout geometry - as if the pane layout was in a single local tmux session.
 
 ## Demo
 
